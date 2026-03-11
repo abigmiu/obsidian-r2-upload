@@ -240,13 +240,17 @@ export default class ObsidianR2UploadPlugin extends Plugin {
         const linked =
           this.findLinkedImageAtCursor(editor, sourcePath) ??
           this.findLinkedImageFromLastContext(sourcePath);
-        if (!linked) return;
 
         menu.addItem((item) => {
           item
             .setTitle(this.tr("menu.upload_linked_image"))
             .setIcon("upload")
+            .setDisabled(!linked)
             .onClick(() => {
+              if (!linked) {
+                new Notice(`${PLUGIN_NAME}: ${this.tr("notice.no_image_at_cursor")}`, 2500);
+                return;
+              }
               void this.enqueueUpload(linked.file.path, sourcePath);
             });
         });
@@ -255,27 +259,23 @@ export default class ObsidianR2UploadPlugin extends Plugin {
   }
 
   private registerEmbedContextCapture() {
-    this.registerDomEvent(
-      this.app.workspace.containerEl,
-      "contextmenu",
-      (evt: MouseEvent) => {
-        const target = evt.target as HTMLElement | null;
-        if (!target) return;
+    const handler = (evt: MouseEvent) => {
+      const target = evt.target as HTMLElement | null;
+      if (!target) return;
 
-        // Capture internal embeds in preview/live preview:
-        // Obsidian often wraps embeds in .internal-embed[src="vault/path.png"]
-        const embedEl = target.closest?.(".internal-embed") as HTMLElement | null;
-        const linkpath = embedEl?.getAttribute?.("src") ?? null;
-        if (!linkpath) return;
+      const activeFile = this.app.workspace.getActiveFile();
+      const sourcePath = activeFile?.path ?? "";
+      if (!sourcePath) return;
 
-        const activeFile = this.app.workspace.getActiveFile();
-        const sourcePath = activeFile?.path ?? "";
-        if (!sourcePath) return;
+      const linkpath = extractLinkpathFromContextTarget(target, evt);
+      if (!linkpath) return;
 
-        this.lastContextEmbed = { linkpath, sourcePath, at: Date.now() };
-      },
-      { capture: true }
-    );
+      this.lastContextEmbed = { linkpath, sourcePath, at: Date.now() };
+    };
+
+    // Capture on document to cover more cases (live preview / reading / embedded elements).
+    this.registerDomEvent(document, "contextmenu", handler, { capture: true });
+    this.registerDomEvent(this.app.workspace.containerEl, "contextmenu", handler, { capture: true });
   }
 
   private findLinkedImageFromLastContext(sourcePath: string): { file: TFile; rawTarget: string } | null {
@@ -577,6 +577,44 @@ function normalizeLinkTarget(raw: string): string {
   } catch {
     return withoutFragment;
   }
+}
+
+function extractLinkpathFromContextTarget(target: HTMLElement, evt: MouseEvent): string | null {
+  // Prefer composedPath when available.
+  const path = (evt as any).composedPath?.() as unknown[] | undefined;
+  const candidates: HTMLElement[] = [];
+  if (Array.isArray(path)) {
+    for (const el of path) {
+      if (el && typeof el === "object" && (el as any).nodeType === 1) {
+        candidates.push(el as HTMLElement);
+      }
+    }
+  }
+  candidates.push(target);
+
+  for (const el of candidates) {
+    // Obsidian internal embeds often look like: <span class="internal-embed ..." src="path/to.png">
+    const embed = el.closest?.(".internal-embed, .image-embed, .media-embed") as HTMLElement | null;
+    const src =
+      embed?.getAttribute?.("src") ??
+      embed?.getAttribute?.("data-src") ??
+      embed?.getAttribute?.("data-href") ??
+      null;
+    if (src) return normalizeLinkTarget(src);
+
+    const img = el.closest?.("img") as HTMLImageElement | null;
+    if (img) {
+      const imgCandidate =
+        img.getAttribute("data-src") ??
+        img.getAttribute("src") ??
+        img.getAttribute("alt") ??
+        img.getAttribute("aria-label") ??
+        null;
+      if (imgCandidate) return normalizeLinkTarget(imgCandidate);
+    }
+  }
+
+  return null;
 }
 
 class R2UploadSettingTab extends PluginSettingTab {
