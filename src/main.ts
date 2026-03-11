@@ -82,6 +82,7 @@ export default class ObsidianR2UploadPlugin extends Plugin {
   private r2Client: R2Client | null = null;
   private stableTracker = new StableFileTracker();
   private locale: SupportedLocale = "en";
+  private lastContextEmbed: { linkpath: string; sourcePath: string; at: number } | null = null;
 
   private pendingContexts: PendingContext[] = [];
   private uploadTasksByPath = new Map<string, UploadTask>();
@@ -96,6 +97,7 @@ export default class ObsidianR2UploadPlugin extends Plugin {
     this.registerAutoUploadEvents();
     this.registerFileMenu();
     this.registerFilesMenu();
+    this.registerEmbedContextCapture();
     this.registerEditorMenu();
     this.registerCommands();
 
@@ -235,7 +237,9 @@ export default class ObsidianR2UploadPlugin extends Plugin {
         const sourcePath = (info as any)?.file?.path ?? this.app.workspace.getActiveFile()?.path;
         if (!sourcePath) return;
 
-        const linked = this.findLinkedImageAtCursor(editor, sourcePath);
+        const linked =
+          this.findLinkedImageAtCursor(editor, sourcePath) ??
+          this.findLinkedImageFromLastContext(sourcePath);
         if (!linked) return;
 
         menu.addItem((item) => {
@@ -248,6 +252,41 @@ export default class ObsidianR2UploadPlugin extends Plugin {
         });
       })
     );
+  }
+
+  private registerEmbedContextCapture() {
+    this.registerDomEvent(
+      this.app.workspace.containerEl,
+      "contextmenu",
+      (evt: MouseEvent) => {
+        const target = evt.target as HTMLElement | null;
+        if (!target) return;
+
+        // Capture internal embeds in preview/live preview:
+        // Obsidian often wraps embeds in .internal-embed[src="vault/path.png"]
+        const embedEl = target.closest?.(".internal-embed") as HTMLElement | null;
+        const linkpath = embedEl?.getAttribute?.("src") ?? null;
+        if (!linkpath) return;
+
+        const activeFile = this.app.workspace.getActiveFile();
+        const sourcePath = activeFile?.path ?? "";
+        if (!sourcePath) return;
+
+        this.lastContextEmbed = { linkpath, sourcePath, at: Date.now() };
+      },
+      { capture: true }
+    );
+  }
+
+  private findLinkedImageFromLastContext(sourcePath: string): { file: TFile; rawTarget: string } | null {
+    const ctx = this.lastContextEmbed;
+    if (!ctx) return null;
+    if (Date.now() - ctx.at > 3000) return null;
+    if (ctx.sourcePath !== sourcePath) return null;
+    const file = this.app.metadataCache.getFirstLinkpathDest(ctx.linkpath, sourcePath);
+    if (!file) return null;
+    if (!isImageFile(file.name)) return null;
+    return { file, rawTarget: ctx.linkpath };
   }
 
   private registerCommands() {

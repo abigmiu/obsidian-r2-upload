@@ -1,7 +1,7 @@
 {
   "id": "obsidian-r2-upload",
   "name": "Obsidian R2 Upload",
-  "version": "0.1.2",
+	"version": "0.1.3",
   "minAppVersion": "0.15.0",
   "description": "Upload images to Cloudflare R2 from Obsidian (desktop & mobile), with waiting for compression to finish.",
   "author": "abigmiu",
