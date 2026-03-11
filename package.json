@@ -1,6 +1,6 @@
 {
   "name": "obsidian-r2-upload",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Obsidian plugin: upload images to Cloudflare R2 (mobile friendly).",
   "main": "main.js",
   "type": "module",
