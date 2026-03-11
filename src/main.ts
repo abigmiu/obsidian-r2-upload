@@ -102,6 +102,10 @@ export default class ObsidianR2UploadPlugin extends Plugin {
     this.registerCommands();
 
     this.tryInitClient();
+    this.tryPatchImageConverterContextMenu();
+    this.app.workspace.onLayoutReady(() => {
+      this.tryPatchImageConverterContextMenu();
+    });
   }
 
   onunload() {
@@ -304,6 +308,53 @@ export default class ObsidianR2UploadPlugin extends Plugin {
         void this.enqueueUpload(linked.file.path, sourcePath);
       }
     });
+  }
+
+  private tryPatchImageConverterContextMenu() {
+    // The "Image Converter" plugin (id: image-converter) implements its own image context menu via `new Menu()`
+    // and stops propagation, so Obsidian's `editor-menu` does not fire. We patch its menu builder to append our item.
+    const plugins = (this.app as any)?.plugins?.plugins as Record<string, any> | undefined;
+    const imageConverter = plugins?.["image-converter"];
+    const contextMenu = imageConverter?.contextMenu;
+    if (!contextMenu) return;
+
+    if (contextMenu.__r2UploadPatched) return;
+    const original = contextMenu.createContextMenuItems;
+    if (typeof original !== "function") return;
+
+    const plugin = this;
+    contextMenu.createContextMenuItems = function patchedCreateContextMenuItems(menu: Menu, img: HTMLImageElement, activeFile: TFile, event: MouseEvent) {
+      try {
+        const sourcePath = activeFile?.path ?? plugin.app.workspace.getActiveFile()?.path ?? "";
+        const linkpath =
+          imageConverter?.folderAndFilenameManagement?.getImagePath?.(img) ??
+          img.getAttribute("src") ??
+          img.getAttribute("data-src") ??
+          null;
+
+        if (sourcePath && linkpath) {
+          const targetFile = plugin.app.metadataCache.getFirstLinkpathDest(normalizeLinkTarget(linkpath), sourcePath);
+          if (targetFile && isImageFile(targetFile.name)) {
+            menu.addItem((item) => {
+              item
+                .setTitle(plugin.tr("menu.upload_linked_image"))
+                .setIcon("upload")
+                .onClick(() => {
+                  void plugin.enqueueUpload(targetFile.path, sourcePath);
+                });
+            });
+            menu.addSeparator();
+          }
+        }
+      } catch (err) {
+        // Do not break the other plugin's context menu.
+        console.warn(`${PLUGIN_NAME}: failed to patch image context menu`, err);
+      }
+
+      return original.call(this, menu, img, activeFile, event);
+    };
+
+    contextMenu.__r2UploadPatched = true;
   }
 
   private async enqueueMultipleUploads(paths: string[], notePath?: string) {
