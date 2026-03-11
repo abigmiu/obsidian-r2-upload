@@ -5,12 +5,16 @@ type Params = Record<string, string | number | boolean | null | undefined>;
 const STRINGS: Record<SupportedLocale, Record<string, string>> = {
   en: {
     "menu.upload_to_r2": "Upload to R2",
+    "menu.upload_linked_image": "Upload linked image to R2",
+    "menu.upload_selected_images": "Upload selected images to R2",
 
     "notice.waiting_stable": "waiting for image to stabilize…",
     "notice.uploading": "uploading…",
     "notice.done": "done ✅",
     "notice.already_queued": "already queued",
     "notice.uploaded_replace_failed": "uploaded, but failed to replace references (see console).",
+    "notice.no_image_at_cursor": "No image link found at cursor.",
+    "notice.no_images_selected": "No images selected.",
 
     "settings.title": "Obsidian R2 Upload",
     "settings.section.r2": "R2 Settings",
@@ -63,12 +67,16 @@ const STRINGS: Record<SupportedLocale, Record<string, string>> = {
   },
   zh: {
     "menu.upload_to_r2": "上传到 R2",
+    "menu.upload_linked_image": "上传当前图片到 R2",
+    "menu.upload_selected_images": "上传选中图片到 R2",
 
     "notice.waiting_stable": "等待图片压缩完成…",
     "notice.uploading": "正在上传…",
     "notice.done": "完成 ✅",
     "notice.already_queued": "已在队列中",
     "notice.uploaded_replace_failed": "已上传，但替换引用失败（详见控制台）。",
+    "notice.no_image_at_cursor": "光标处未找到图片链接。",
+    "notice.no_images_selected": "未选中图片。",
 
     "settings.title": "Obsidian R2 Upload",
     "settings.section.r2": "R2 配置",
@@ -121,12 +129,16 @@ const STRINGS: Record<SupportedLocale, Record<string, string>> = {
   },
   ja: {
     "menu.upload_to_r2": "R2 にアップロード",
+    "menu.upload_linked_image": "リンク画像を R2 にアップロード",
+    "menu.upload_selected_images": "選択した画像を R2 にアップロード",
 
     "notice.waiting_stable": "圧縮完了を待機中…",
     "notice.uploading": "アップロード中…",
     "notice.done": "完了 ✅",
     "notice.already_queued": "キューに追加済み",
     "notice.uploaded_replace_failed": "アップロード済みですが、参照の置換に失敗しました（コンソール参照）。",
+    "notice.no_image_at_cursor": "カーソル位置に画像リンクが見つかりません。",
+    "notice.no_images_selected": "画像が選択されていません。",
 
     "settings.title": "Obsidian R2 Upload",
     "settings.section.r2": "R2 設定",

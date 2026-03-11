@@ -7,6 +7,7 @@ import {
   Setting,
   TAbstractFile,
   TFile,
+  Menu,
   normalizePath
 } from "obsidian";
 import { moment } from "obsidian";
@@ -94,6 +95,9 @@ export default class ObsidianR2UploadPlugin extends Plugin {
     this.registerVaultStabilityEvents();
     this.registerAutoUploadEvents();
     this.registerFileMenu();
+    this.registerFilesMenu();
+    this.registerEditorMenu();
+    this.registerCommands();
 
     this.tryInitClient();
   }
@@ -203,6 +207,119 @@ export default class ObsidianR2UploadPlugin extends Plugin {
         });
       })
     );
+  }
+
+  private registerFilesMenu() {
+    this.registerEvent(
+      this.app.workspace.on("files-menu", (menu, files) => {
+        const imageFiles = files.filter((f): f is TFile => f instanceof TFile && isImageFile(f.name));
+        if (imageFiles.length === 0) return;
+
+        menu.addItem((item) => {
+          item
+            .setTitle(this.tr("menu.upload_selected_images"))
+            .setIcon("upload")
+            .onClick(() => {
+              const activeNote = this.app.workspace.getActiveFile();
+              const notePath = activeNote?.extension === "md" ? activeNote.path : undefined;
+              void this.enqueueMultipleUploads(imageFiles.map((f) => f.path), notePath);
+            });
+        });
+      })
+    );
+  }
+
+  private registerEditorMenu() {
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor, info) => {
+        const sourcePath = (info as any)?.file?.path ?? this.app.workspace.getActiveFile()?.path;
+        if (!sourcePath) return;
+
+        const linked = this.findLinkedImageAtCursor(editor, sourcePath);
+        if (!linked) return;
+
+        menu.addItem((item) => {
+          item
+            .setTitle(this.tr("menu.upload_linked_image"))
+            .setIcon("upload")
+            .onClick(() => {
+              void this.enqueueUpload(linked.file.path, sourcePath);
+            });
+        });
+      })
+    );
+  }
+
+  private registerCommands() {
+    this.addCommand({
+      id: "upload-image-at-cursor",
+      name: this.tr("menu.upload_linked_image"),
+      editorCallback: (editor, view) => {
+        const sourcePath = (view as any)?.file?.path ?? this.app.workspace.getActiveFile()?.path;
+        if (!sourcePath) return;
+        const linked = this.findLinkedImageAtCursor(editor, sourcePath);
+        if (!linked) {
+          new Notice(`${PLUGIN_NAME}: ${this.tr("notice.no_image_at_cursor")}`, 2500);
+          return;
+        }
+        void this.enqueueUpload(linked.file.path, sourcePath);
+      }
+    });
+  }
+
+  private async enqueueMultipleUploads(paths: string[], notePath?: string) {
+    if (paths.length === 0) {
+      new Notice(`${PLUGIN_NAME}: ${this.tr("notice.no_images_selected")}`, 2500);
+      return;
+    }
+    for (const p of paths) {
+      // sequential to keep notices and stability waits understandable
+      await this.enqueueUpload(p, notePath);
+    }
+  }
+
+  private findLinkedImageAtCursor(editor: Editor, sourcePath: string): { file: TFile; rawTarget: string } | null {
+    const selection = editor.getSelection()?.trim();
+    const cursor = editor.getCursor();
+    const line = editor.getLine(cursor.line);
+
+    const candidate = this.extractFirstImageTarget(selection) ?? this.extractImageTargetInLine(line, cursor.ch);
+    if (!candidate) return null;
+
+    if (/^[a-z]+:\/\//i.test(candidate)) return null;
+
+    const file = this.app.metadataCache.getFirstLinkpathDest(candidate, sourcePath);
+    if (!file) return null;
+    if (!isImageFile(file.name)) return null;
+    return { file, rawTarget: candidate };
+  }
+
+  private extractImageTargetInLine(line: string, cursorCh: number): string | null {
+    const matches: { start: number; end: number; target: string }[] = [];
+
+    for (const m of line.matchAll(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)) {
+      const start = m.index ?? 0;
+      const end = start + m[0].length;
+      matches.push({ start, end, target: normalizeLinkTarget(m[1]) });
+    }
+    for (const m of line.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
+      const start = m.index ?? 0;
+      const end = start + m[0].length;
+      matches.push({ start, end, target: normalizeLinkTarget(m[1]) });
+    }
+
+    if (matches.length === 0) return null;
+    const inRange = matches.find((x) => cursorCh >= x.start && cursorCh <= x.end);
+    return (inRange ?? matches[0]).target;
+  }
+
+  private extractFirstImageTarget(text: string | undefined): string | null {
+    if (!text) return null;
+    const wiki = text.match(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
+    if (wiki) return normalizeLinkTarget(wiki[1]);
+    const md = text.match(/!\[[^\]]*\]\(([^)]+)\)/);
+    if (md) return normalizeLinkTarget(md[1]);
+    return null;
   }
 
   private recordPendingContext(notePath: string, remaining: number) {
@@ -412,6 +529,17 @@ export default class ObsidianR2UploadPlugin extends Plugin {
   }
 }
 
+function normalizeLinkTarget(raw: string): string {
+  const trimmed = raw.trim();
+  const withoutAngles = trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1) : trimmed;
+  const withoutFragment = withoutAngles.split("#")[0];
+  try {
+    return decodeURIComponent(withoutFragment);
+  } catch {
+    return withoutFragment;
+  }
+}
+
 class R2UploadSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: ObsidianR2UploadPlugin) {
     super(app, plugin);
@@ -581,4 +709,3 @@ class R2UploadSettingTab extends PluginSettingTab {
     }
   }
 }
-
