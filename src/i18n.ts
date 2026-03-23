@@ -33,6 +33,10 @@ const STRINGS: Record<SupportedLocale, Record<string, string>> = {
     "settings.r2.path_prefix_desc": "Must end with /. Example: images/",
 
     "settings.behavior.auto_upload": "Auto upload on paste/drop",
+    "settings.behavior.enable_compression": "Compress images before upload",
+    "settings.behavior.enable_compression_desc": "Convert supported raster images to WebP before uploading.",
+    "settings.behavior.compression_quality": "WebP quality (%)",
+    "settings.behavior.compression_quality_desc": "Compression quality from 1 to 100. Default: {default}.",
     "settings.behavior.stable_window": "Stable window (ms)",
     "settings.behavior.stable_window_desc": "Wait until the file stops changing for this long. Default: {default}ms.",
     "settings.behavior.create_window": "Create window (ms)",
@@ -95,6 +99,10 @@ const STRINGS: Record<SupportedLocale, Record<string, string>> = {
     "settings.r2.path_prefix_desc": "必须以 / 结尾，例如 images/",
 
     "settings.behavior.auto_upload": "粘贴/拖拽后自动上传",
+    "settings.behavior.enable_compression": "上传前压缩图片",
+    "settings.behavior.enable_compression_desc": "将支持的位图图片先转换为 WebP 再上传。",
+    "settings.behavior.compression_quality": "WebP 质量（%）",
+    "settings.behavior.compression_quality_desc": "压缩质量范围 1 到 100，默认 {default}。",
     "settings.behavior.stable_window": "稳定窗口（毫秒）",
     "settings.behavior.stable_window_desc": "文件在这段时间内无 modify/rename 事件则视为稳定。默认 {default}ms。",
     "settings.behavior.create_window": "创建窗口（毫秒）",
@@ -157,6 +165,10 @@ const STRINGS: Record<SupportedLocale, Record<string, string>> = {
     "settings.r2.path_prefix_desc": "/ で終わる必要があります（例：images/）",
 
     "settings.behavior.auto_upload": "貼り付け/ドロップで自動アップロード",
+    "settings.behavior.enable_compression": "アップロード前に画像を圧縮",
+    "settings.behavior.enable_compression_desc": "対応するラスター画像をアップロード前に WebP へ変換します。",
+    "settings.behavior.compression_quality": "WebP 品質（%）",
+    "settings.behavior.compression_quality_desc": "圧縮品質は 1 から 100。デフォルトは {default}。",
     "settings.behavior.stable_window": "安定ウィンドウ（ms）",
     "settings.behavior.stable_window_desc": "この時間 modify/rename が無ければ安定とみなします。デフォルト {default}ms。",
     "settings.behavior.create_window": "作成ウィンドウ（ms）",

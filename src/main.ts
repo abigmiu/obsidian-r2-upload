@@ -14,6 +14,7 @@ import { moment } from "obsidian";
 
 import { R2Client, type R2Config } from "./r2";
 import { StableFileTracker } from "./stability";
+import { compressImageForUpload } from "./image-compression";
 import {
   buildUploadKey,
   ensureFolderExists,
@@ -34,6 +35,8 @@ type LocalFilePolicy = "keep" | "delete" | "move";
 interface R2UploadSettings {
   r2: R2Config;
   enableAutoUpload: boolean;
+  enableCompression: boolean;
+  compressionQuality: number;
   createWindowMs: number;
   stableForMs: number;
   namingStrategy: NamingStrategy;
@@ -53,6 +56,8 @@ const DEFAULT_SETTINGS: R2UploadSettings = {
     pathPrefix: "images/"
   },
   enableAutoUpload: true,
+  enableCompression: true,
+  compressionQuality: 75,
   createWindowMs: 5000,
   stableForMs: 2000,
   namingStrategy: "uuid",
@@ -485,23 +490,27 @@ export default class ObsidianR2UploadPlugin extends Plugin {
       await this.stableTracker.waitUntilStable(() => task.path, this.settings.stableForMs, 30000);
 
       const { file, bytes } = await this.readStableBinary(task);
+      const uploadPayload = await this.prepareUploadPayload(file, bytes);
 
       const key = await buildUploadKey({
-        file,
-        bytes,
+        file: {
+          basename: uploadPayload.fileName.replace(/\.[^.]+$/, ""),
+          extension: uploadPayload.fileName.split(".").pop()?.toLowerCase() ?? file.extension.toLowerCase()
+        } as TFile,
+        bytes: uploadPayload.bytes,
         namingStrategy: this.settings.namingStrategy,
         pathPrefix: client.getPathPrefix(),
         uuid: makeUuid,
         sanitizeBaseName
       });
 
-      const contentType = guessContentType(file.name);
+      const contentType = uploadPayload.contentType ?? guessContentType(uploadPayload.fileName);
 
       new Notice(`${PLUGIN_NAME}: ${this.tr("notice.uploading")}`, 1500);
       const url = await client.putObject({
         bucket: client.getBucket(),
         key,
-        body: bytes,
+        body: uploadPayload.bytes,
         contentType
       });
 
@@ -549,6 +558,25 @@ export default class ObsidianR2UploadPlugin extends Plugin {
       await this.stableTracker.waitUntilStable(() => task.path, this.settings.stableForMs, 30000);
     }
     throw this.localizedError("err.file_still_changing");
+  }
+
+  private async prepareUploadPayload(file: TFile, bytes: ArrayBuffer) {
+    try {
+      return await compressImageForUpload({
+        bytes,
+        fileName: file.name,
+        enabled: this.settings.enableCompression,
+        quality: this.settings.compressionQuality / 100
+      });
+    } catch (err) {
+      console.warn(`${PLUGIN_NAME}: image compression failed, falling back to original upload`, err);
+      return {
+        bytes,
+        fileName: file.name,
+        contentType: guessContentType(file.name),
+        compressed: false
+      };
+    }
   }
 
   private getFileOrThrow(path: string): TFile {
@@ -751,6 +779,31 @@ class R2UploadSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         })
       );
+
+    new Setting(containerEl)
+      .setName(this.plugin.tr("settings.behavior.enable_compression"))
+      .setDesc(this.plugin.tr("settings.behavior.enable_compression_desc"))
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.enableCompression).onChange(async (value) => {
+          this.plugin.settings.enableCompression = value;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (this.plugin.settings.enableCompression) {
+      new Setting(containerEl)
+        .setName(this.plugin.tr("settings.behavior.compression_quality"))
+        .setDesc(this.plugin.tr("settings.behavior.compression_quality_desc", { default: 75 }))
+        .addText((text) =>
+          text.setValue(String(this.plugin.settings.compressionQuality)).onChange(async (value) => {
+            const quality = Number(value);
+            if (!Number.isFinite(quality) || quality < 1 || quality > 100) return;
+            this.plugin.settings.compressionQuality = quality;
+            await this.plugin.saveSettings();
+          })
+        );
+    }
 
     new Setting(containerEl)
       .setName(this.plugin.tr("settings.behavior.stable_window"))

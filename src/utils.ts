@@ -1,4 +1,5 @@
 import { App, TFile, normalizePath } from "obsidian";
+import { buildUploadFileName } from "./upload-key";
 
 export function isImageFile(name: string): boolean {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
@@ -87,24 +88,12 @@ export async function buildUploadKey(opts: {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
 
-  const ext = opts.file.extension.toLowerCase();
-  const base = opts.sanitizeBaseName(opts.file.basename);
-
-  const suffix = opts.namingStrategy === "uuid" ? opts.uuid() : await sha256Hex8(opts.bytes);
-  const fileName = `${base}-${suffix}.${ext}`;
+  const fileName = await buildUploadFileName({
+    extension: opts.file.extension,
+    bytes: opts.bytes,
+    namingStrategy: opts.namingStrategy,
+    uuid: opts.uuid
+  });
   const prefix = opts.pathPrefix || "";
   return normalizePath(`${prefix}${yyyy}/${mm}/${dd}/${fileName}`);
-}
-
-async function sha256Hex8(bytes: ArrayBuffer): Promise<string> {
-  if (!globalThis.crypto?.subtle) {
-    // fallback: not cryptographically strong, but avoids hard failure
-    return makeUuid().replace(/-/g, "").slice(0, 8);
-  }
-  const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-  const hashBytes = new Uint8Array(hashBuffer);
-  const hex = Array.from(hashBytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return hex.slice(0, 8);
 }
